@@ -12,7 +12,7 @@ def current_conditions():
     """Latest AQI per station."""
     rows = store.query("""
         SELECT l.id, l.name, l.latitude, l.longitude,
-               m.value, m.measured_at
+               m.value, m.measured_at, l.source
         FROM locations l
         JOIN measurements m ON l.id = m.location_id
         WHERE m.parameter = 'pm25'
@@ -39,6 +39,7 @@ def current_conditions():
             "color": info["color"],
             "text_color": info["text_color"],
             "measured_at": r["measured_at"],
+            "source": r["source"],
         })
     return out
 
@@ -88,7 +89,15 @@ def trends():
                 s["trend_label"] = f"→ {diff_pct:.1f}% vs week"
         else:
             s["trend"] = "unknown"
-            s["trend_label"] = "Insufficient data"
+            last_seen = s.get("measured_at")
+            if last_seen:
+                try:
+                    dt = datetime.fromisoformat(last_seen.replace("Z", "+00:00"))
+                    s["trend_label"] = f"Offline since {dt.strftime('%b %d')}"
+                except Exception:
+                    s["trend_label"] = "Station offline"
+            else:
+                s["trend_label"] = "Station offline"
 
     return current
 

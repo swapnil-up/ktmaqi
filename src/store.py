@@ -14,15 +14,27 @@ def _conn():
     return conn
 
 
+def _migrate(db):
+    cur = db.execute("PRAGMA table_info(locations)")
+    cols = {r[1] for r in cur.fetchall()}
+    if "source" not in cols:
+        db.execute("ALTER TABLE locations ADD COLUMN source TEXT NOT NULL DEFAULT 'openaq'")
+    if "gss_station_id" not in cols:
+        db.execute("ALTER TABLE locations ADD COLUMN gss_station_id INTEGER")
+
+
 def init_db():
     with _conn() as db:
+        _migrate(db)
         db.executescript("""
             CREATE TABLE IF NOT EXISTS locations (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
                 latitude REAL,
                 longitude REAL,
-                is_active INTEGER DEFAULT 1
+                is_active INTEGER DEFAULT 1,
+                source TEXT NOT NULL DEFAULT 'openaq',
+                gss_station_id INTEGER
             );
 
             CREATE TABLE IF NOT EXISTS sensors (
@@ -49,15 +61,19 @@ def init_db():
 def upsert_locations(locations):
     with _conn() as db:
         for loc in locations:
+            source = loc.get("source", "openaq")
+            gss_id = loc.get("gss_station_id")
             db.execute(
-                """INSERT INTO locations (id, name, latitude, longitude, is_active)
-                   VALUES (?, ?, ?, ?, 1)
+                """INSERT INTO locations (id, name, latitude, longitude, is_active, source, gss_station_id)
+                   VALUES (?, ?, ?, ?, 1, ?, ?)
                    ON CONFLICT(id) DO UPDATE SET
                        name=excluded.name,
                        latitude=excluded.latitude,
                        longitude=excluded.longitude,
+                       source=excluded.source,
+                       gss_station_id=excluded.gss_station_id,
                        is_active=1""",
-                (loc["id"], loc["name"], loc["latitude"], loc["longitude"]),
+                (loc["id"], loc["name"], loc["latitude"], loc["longitude"], source, gss_id),
             )
 
 

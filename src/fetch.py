@@ -85,11 +85,11 @@ def fetch_all(api_key, location_ids, cached_sensors=None):
             try:
                 sensor_map[lid] = _get_sensors_for_location(api_key, lid)
             except urllib.error.HTTPError as e:
-                print(f"  WARN: sensors for {lid}: HTTP {e.code}")
+                print(f"  SKIP loc {lid}: sensors HTTP {e.code}")
                 time.sleep(1)
                 continue
             except Exception as e:
-                print(f"  WARN: sensors for {lid}: {e}")
+                print(f"  SKIP loc {lid}: sensors error {e}")
                 time.sleep(1)
                 continue
 
@@ -101,12 +101,18 @@ def fetch_all(api_key, location_ids, cached_sensors=None):
                 f"{OPENAQ_BASE}/locations/{lid}/latest", api_key
             )
         except urllib.error.HTTPError as e:
-            print(f"  WARN: latest for {lid}: HTTP {e.code}")
+            print(f"  SKIP loc {lid}: latest HTTP {e.code}")
             time.sleep(1)
             continue
         except Exception as e:
-            print(f"  WARN: latest for {lid}: {e}")
+            print(f"  SKIP loc {lid}: latest error {e}")
             time.sleep(1)
+            continue
+
+        results = data.get("results", [])
+        if not results:
+            print(f"  SKIP loc {lid}: OpenAQ returned no latest readings")
+            time.sleep(0.5)
             continue
 
         # Find PM2.5 reading
@@ -115,21 +121,28 @@ def fetch_all(api_key, location_ids, cached_sensors=None):
             if pname == "pm25"
         }
         if not pm25_sensors:
+            print(f"  SKIP loc {lid}: no PM2.5 sensor registered")
             time.sleep(0.5)
             continue
 
-        for r in data.get("results", []):
+        found = False
+        for r in results:
             if r["sensorsId"] not in pm25_sensors:
                 continue
             val = r["value"]
             if val is None or val < 1.0:  # skip sentinel and noise
+                print(f"  SKIP loc {lid}: PM2.5 value {val} filtered as noise")
                 continue
             readings[lid] = {
                 "value": val,
                 "unit": "µg/m³",
                 "measured_at": r["datetime"]["utc"],
             }
+            found = True
             break
+
+        if not found and pm25_sensors:
+            print(f"  SKIP loc {lid}: PM2.5 sensor(s) present but no valid reading in response")
 
         time.sleep(0.5)
 
