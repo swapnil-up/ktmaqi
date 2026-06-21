@@ -15,6 +15,11 @@ def _conn():
 
 
 def _migrate(db):
+    table_exists = db.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='locations'"
+    ).fetchone()
+    if not table_exists:
+        return
     cur = db.execute("PRAGMA table_info(locations)")
     cols = {r[1] for r in cur.fetchall()}
     if "source" not in cols:
@@ -25,7 +30,6 @@ def _migrate(db):
 
 def init_db():
     with _conn() as db:
-        _migrate(db)
         db.executescript("""
             CREATE TABLE IF NOT EXISTS locations (
                 id INTEGER PRIMARY KEY,
@@ -56,6 +60,7 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_meas_loc_param_time
                 ON measurements(location_id, parameter, measured_at DESC);
         """)
+        _migrate(db)
 
 
 def upsert_locations(locations):
