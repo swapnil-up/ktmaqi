@@ -15,17 +15,14 @@ def _conn():
 
 
 def _migrate(db):
-    table_exists = db.execute(
-        "SELECT name FROM sqlite_master WHERE type='table' AND name='locations'"
-    ).fetchone()
-    if not table_exists:
-        return
-    cur = db.execute("PRAGMA table_info(locations)")
-    cols = {r[1] for r in cur.fetchall()}
-    if "source" not in cols:
-        db.execute("ALTER TABLE locations ADD COLUMN source TEXT NOT NULL DEFAULT 'openaq'")
-    if "gss_station_id" not in cols:
-        db.execute("ALTER TABLE locations ADD COLUMN gss_station_id INTEGER")
+    for col_def in [
+        "source TEXT NOT NULL DEFAULT 'openaq'",
+        "gss_station_id INTEGER",
+    ]:
+        try:
+            db.execute(f"ALTER TABLE locations ADD COLUMN {col_def}")
+        except sqlite3.OperationalError:
+            pass
 
 
 def init_db():
